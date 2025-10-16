@@ -1,0 +1,60 @@
+name: Azure CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build Backend Image
+      run: |
+        cd backend
+        docker build -t fusionpact-backend:${{ github.sha }} .
+        docker tag fusionpact-backend:${{ github.sha }} fusionpact-backend:latest
+
+    - name: Build Frontend Image
+      run: |
+        cd frontend
+        docker build -t fusionpact-frontend:${{ github.sha }} .
+        docker tag fusionpact-frontend:${{ github.sha }} fusionpact-frontend:latest
+
+    - name: Deploy to Azure VM
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.AZURE_VM_IP }}
+        username: azureuser
+        key: ${{ secrets.AZURE_SSH_KEY }}
+        script: |
+          cd /home/azureuser/fusionpact-devops-challenge
+          git pull origin main
+          docker-compose down
+          docker-compose up -d --build
+          docker system prune -f
+          
+    - name: Verify Deployment
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.AZURE_VM_IP }}
+        username: azureuser
+        key: ${{ secrets.AZURE_SSH_KEY }}
+        script: |
+          docker ps
+          sleep 10
+          curl -f http://localhost || exit 1
+          curl -f http://localhost:8000/health || exit 1
+
+    - name: Send Notification
+      if: always()
+      run: |
+        echo "Deployment Status: ${{ job.status }}"
