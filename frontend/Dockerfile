@@ -1,2 +1,10 @@
-FROM nginx:1.27-alpine
+FROM nginx:alpine
+
+# Copy frontend files
 COPY . /usr/share/nginx/html
+
+# Expose port
+EXPOSE 80
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
